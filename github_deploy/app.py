@@ -81,21 +81,13 @@ def process_extraction(input_list):
 if "input_boxes" not in st.session_state:
     st.session_state.input_boxes = [""]
 
-def _maybe_add_new_input_box():
-    last_idx = len(st.session_state.input_boxes) - 1
-    last_key = f"input_box_{last_idx}"
-    if st.session_state.get(last_key, "").strip() != "":
-        st.session_state.input_boxes.append("")
-
-# 渲染输入框：只有最后一个输入框绑定 on_change，用于“输入完成后自动新增”
+# 渲染输入框：仅通过“➕ 新增输入框”按钮显式新增，避免按钮点击与自动新增触发冲突
 for i in range(len(st.session_state.input_boxes)):
-    is_last = i == len(st.session_state.input_boxes) - 1
     st.text_area(
         f"内容 {i+1}：",
         height=100,
         key=f"input_box_{i}",
         placeholder="请输入飞书链接或直接粘贴文本...",
-        on_change=_maybe_add_new_input_box if is_last else None,
     )
 
 col_add, col_extract = st.columns([1, 4])
