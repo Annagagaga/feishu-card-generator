@@ -17,126 +17,119 @@ st.markdown("通过输入飞书 PRD 文档链接或文本，自动提取业务�
 
 if "extracted_list" not in st.session_state:
     st.session_state.extracted_list = []
+if "processed_inputs" not in st.session_state:
+    st.session_state.processed_inputs = set()
 
 st.header("1. 输入 PRD 内容或链接")
-st.markdown("你可以直接混排输入 **飞书文档链接** 和 **PRD 纯文本**。系统会自动识别链接去拉取内容，纯文本则直接进行提取。")
-
-# 维护动态追加输入框的数量
-if "append_input_count" not in st.session_state:
-    st.session_state.append_input_count = 0
+st.markdown("一个输入框对应一个飞书文档链接或一段纯文本。点击 **➕ 新增输入框** 可以继续添加。")
 
 # 处理提取逻辑的核心函数
-def process_extraction(input_text, is_append=False):
-    parts = [p.strip() for p in input_text.split('---') if p.strip()]
-    if not parts:
+def process_extraction(input_list):
+    valid_parts = [p.strip() for p in input_list if p.strip()]
+    if not valid_parts:
         st.warning("请输入有效内容或链接")
-        return False
+        return [], []
         
     new_extracted = []
+    success_parts = []
+    failed_parts = []
     progress_bar = st.progress(0)
     status_text = st.empty()
     
-    for i, part in enumerate(parts):
+    has_error = False
+    for i, part in enumerate(valid_parts):
         is_link = part.startswith("http") and "larkoffice.com" in part and len(part.split()) == 1
         
         if is_link:
-            status_text.text(f"正在读取文档 {i+1}/{len(parts)}: {part}")
+            status_text.text(f"正在读取文档 {i+1}/{len(valid_parts)}: {part}")
             try:
                 content = get_doc_content(part)
-                status_text.text(f"正在提取文档 {i+1}/{len(parts)} 的文案...")
+                status_text.text(f"正在提取文档 {i+1}/{len(valid_parts)} 的文案...")
                 extracted = extract_text_from_prd(content)
                 extracted["source"] = part
                 new_extracted.append(extracted)
+                success_parts.append(part)
             except Exception as e:
                 st.error(f"处理链接 {part} 失败: {e}")
+                has_error = True
+                failed_parts.append(part)
         else:
-            status_text.text(f"正在提取文本 {i+1}/{len(parts)} 的文案...")
+            status_text.text(f"正在提取文本 {i+1}/{len(valid_parts)} 的文案...")
             try:
                 extracted = extract_text_from_prd(part)
                 source_preview = part[:20].replace('\n', ' ') + "..."
                 extracted["source"] = f"文本: {source_preview}"
                 new_extracted.append(extracted)
+                success_parts.append(part)
             except Exception as e:
                 st.error(f"处理文本失败: {e}")
+                has_error = True
+                failed_parts.append(part)
                 
-        progress_bar.progress((i + 1) / len(parts))
+        progress_bar.progress((i + 1) / len(valid_parts))
     
-    if not is_append:
-        st.session_state.extracted_list = new_extracted
-    else:
+    # 统一使用 extend 进行追加，避免覆盖老数据
+    if new_extracted:
         st.session_state.extracted_list.extend(new_extracted)
+        st.session_state.card_generated = False
+        status_text.text("✅ 提取完成！已追加到下方项目列表中。")
         
-    st.session_state.card_generated = False
-    status_text.text("✅ 提取完成！请在下方审核。")
-    return True
+    if has_error:
+        status_text.text("⚠️ 部分内容提取失败，请根据上方报错信息处理后重试。")
+    return success_parts, failed_parts
 
-# 1. 初始的主输入框
-st.markdown("### 📥 初始提取")
-st.markdown("请在下方输入飞书文档链接或粘贴文本内容。**（输入完毕后点击框外或按 Cmd+Enter，会自动新增下一个输入框）**")
+if "input_boxes" not in st.session_state:
+    st.session_state.input_boxes = [""]
 
-if "initial_inputs" not in st.session_state:
-    st.session_state.initial_inputs = [""]
-
-current_inputs = []
-for i in range(len(st.session_state.initial_inputs)):
-    val = st.text_area(
+# 渲染输入框
+for i in range(len(st.session_state.input_boxes)):
+    st.text_area(
         f"内容 {i+1}：",
-        value=st.session_state.initial_inputs[i],
         height=100,
-        key=f"init_input_{i}",
+        key=f"input_box_{i}",
         placeholder="请输入飞书链接或直接粘贴文本..."
     )
-    current_inputs.append(val)
 
-# 更新状态
-st.session_state.initial_inputs = current_inputs
-
-# 如果最后一个框有内容，自动追加一个新的空框并重新渲染
-if st.session_state.initial_inputs[-1].strip() != "":
-    st.session_state.initial_inputs.append("")
+# 自动追加新框的逻辑：如果最后一个框非空，自动加一个空框
+last_idx = len(st.session_state.input_boxes) - 1
+last_key = f"input_box_{last_idx}"
+if st.session_state.get(last_key, "").strip() != "":
+    st.session_state.input_boxes.append("")
     st.rerun()
 
-col1, col2 = st.columns([1, 4])
-with col1:
-    if st.button("🚀 开启提取", key="btn_main_extract", use_container_width=True):
-        # 过滤掉空的输入框
-        valid_inputs = [item for item in st.session_state.initial_inputs if item.strip()]
-        if not valid_inputs:
+col_add, col_extract = st.columns([1, 4])
+
+with col_add:
+    if st.button("➕ 新增输入框"):
+        st.session_state.input_boxes.append("")
+        st.rerun()
+
+with col_extract:
+    if st.button("🚀 提取当前框内文案", use_container_width=True):
+        all_inputs = []
+        for i in range(len(st.session_state.input_boxes)):
+            val = st.session_state.get(f"input_box_{i}", "").strip()
+            if val:
+                all_inputs.append(val)
+                
+        if not all_inputs:
             st.warning("请至少输入一个有效内容")
         else:
-            # 将所有有效内容用 '---' 拼接，复用原有的 process_extraction 逻辑
-            combined_input = "\n---\n".join(valid_inputs)
-            if process_extraction(combined_input, is_append=False):
-                # 提取成功后，清空初始输入框
-                st.session_state.initial_inputs = [""]
-                for key in list(st.session_state.keys()):
-                    if key.startswith("init_input_"):
-                        del st.session_state[key]
+            new_inputs = [v for v in all_inputs if v not in st.session_state.processed_inputs]
+            if not new_inputs:
+                st.info("没有新增的链接/文本需要提取（之前的已提取过）。")
+            else:
+                success_parts, _failed_parts = process_extraction(new_inputs)
+                if success_parts:
+                    st.session_state.processed_inputs.update(success_parts)
                 st.rerun()
-
-st.markdown("---")
-
-# 2. 动态追加输入框区域
-st.markdown("### 追加提取")
-st.markdown("如果有新的 PRD 需要追加到下方的项目中，点击加号添加新的输入框。")
-
-# 渲染所有已存在的追加输入框
-for i in range(st.session_state.append_input_count):
-    append_input = st.text_area(f"追加内容框 {i+1}：", height=100, key=f"append_input_{i}")
-    if st.button(f"🌟 提取此框内容", key=f"btn_append_{i}"):
-        if process_extraction(append_input, is_append=True):
-            st.rerun()
-
-# 增加新的输入框按钮
-if st.button("➕ 新增一个追加输入框", key="btn_add_input"):
-    st.session_state.append_input_count += 1
-    st.rerun()
 
 if st.session_state.extracted_list:
     st.header("2. 审核与编辑文案")
     
     if st.button("🗑️ 清空列表"):
         st.session_state.extracted_list = []
+        st.session_state.processed_inputs = set()
         st.session_state.card_generated = False
         st.rerun()
         
@@ -267,20 +260,28 @@ if st.session_state.extracted_list:
         with col_translate:
             if st.button("🌐 确认中文无误，生成英文翻译版"):
                 st.session_state.extracted_list = edited_list
-                with st.spinner("正在将中文文案翻译为英文..."):
+                with st.spinner("正在将新增的中文文案翻译为英文..."):
                     try:
-                        english_list = []
+                        if "english_list" not in st.session_state:
+                            st.session_state.english_list = []
+                            
+                        new_english_list = []
                         for idx, item in enumerate(edited_list):
-                            eng_title = translate_to_english(item["title"])
-                            eng_content = translate_to_english(item["content"])
-                            english_list.append({
-                                "title": eng_title,
-                                "category": item["category"],
-                                "content": eng_content,
-                                "source": item["source"],
-                                "img_key": ""  # 英文图片独立上传
-                            })
-                        st.session_state.english_list = english_list
+                            # 如果旧的英文翻译存在，保留以避免重复翻译
+                            if idx < len(st.session_state.english_list):
+                                new_english_list.append(st.session_state.english_list[idx])
+                            else:
+                                # 只有新追加的内容才调用模型翻译
+                                eng_title = translate_to_english(item["title"])
+                                eng_content = translate_to_english(item["content"])
+                                new_english_list.append({
+                                    "title": eng_title,
+                                    "category": item["category"],
+                                    "content": eng_content,
+                                    "source": item["source"],
+                                    "img_key": ""  # 英文图片独立上传
+                                })
+                        st.session_state.english_list = new_english_list
                         st.session_state.show_english_review = True
                         st.success("翻译完成，请在下方审核英文文案！")
                     except Exception as e:
