@@ -4,6 +4,8 @@ import json
 import requests
 import re
 
+DEFAULT_HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "25"))
+
 def get_tenant_access_token():
     app_id = os.getenv("FEISHU_APP_ID")
     app_secret = os.getenv("FEISHU_APP_SECRET")
@@ -15,8 +17,13 @@ def get_tenant_access_token():
         "app_id": app_id,
         "app_secret": app_secret
     }
-    response = requests.post(url, json=payload)
-    data = response.json()
+    try:
+        response = requests.post(url, json=payload, timeout=DEFAULT_HTTP_TIMEOUT_SECONDS)
+        data = response.json()
+    except requests.exceptions.Timeout as e:
+        raise Exception(f"获取 tenant_access_token 超时，请稍后重试（{DEFAULT_HTTP_TIMEOUT_SECONDS}s）") from e
+    except Exception as e:
+        raise Exception(f"获取 tenant_access_token 失败: {str(e)}") from e
     if data.get("code") != 0:
         raise Exception(f"获取 tenant_access_token 失败: {data.get('msg')}")
     return data.get("tenant_access_token")
@@ -33,8 +40,13 @@ def upload_image_to_feishu(file_bytes):
     data = {
         "image_type": "message"
     }
-    response = requests.post(url, headers=headers, files=files, data=data)
-    result = response.json()
+    try:
+        response = requests.post(url, headers=headers, files=files, data=data, timeout=DEFAULT_HTTP_TIMEOUT_SECONDS)
+        result = response.json()
+    except requests.exceptions.Timeout as e:
+        raise Exception(f"上传图片超时，请稍后重试（{DEFAULT_HTTP_TIMEOUT_SECONDS}s）") from e
+    except Exception as e:
+        raise Exception(f"上传图片失败: {str(e)}") from e
     if result.get("code") != 0:
         raise Exception(f"上传图片失败: {result.get('msg')} (code: {result.get('code')})")
     return result.get("data", {}).get("image_key")
@@ -55,7 +67,7 @@ def get_doc_content(doc_url):
             token = get_tenant_access_token()
             url = f"https://open.feishu.cn/open-apis/wiki/v2/spaces/get_node?token={wiki_token}"
             headers = {"Authorization": f"Bearer {token}"}
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=DEFAULT_HTTP_TIMEOUT_SECONDS)
             result = response.json()
             if result.get("code") == 0:
                 doc_token = result.get("data", {}).get("node", {}).get("obj_token")
@@ -95,7 +107,7 @@ def get_doc_content(doc_url):
             "Authorization": f"Bearer {token}"
         }
         
-        response = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers, timeout=DEFAULT_HTTP_TIMEOUT_SECONDS)
         result = response.json()
         
         if result.get("code") != 0:
