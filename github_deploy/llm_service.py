@@ -122,6 +122,8 @@ def extract_with_claude(prd_content):
 def extract_with_deepseek(prd_content):
     api_key = os.getenv("DEEPSEEK_API_KEY")
     base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+    if not api_key:
+        raise Exception("未配置 DEEPSEEK_API_KEY（云端请在 Streamlit Secrets 中配置，或切换 LLM_PROVIDER=claude）")
 
     prompt = EXTRACTION_PROMPT.replace("{{PRD_CONTENT}}", prd_content)
 
@@ -150,6 +152,8 @@ def extract_with_deepseek(prd_content):
             json=payload,
             timeout=60
         )
+        if response.status_code == 401:
+            raise Exception("DeepSeek 鉴权失败(401)：请检查 Streamlit Secrets 中的 DEEPSEEK_API_KEY 是否正确，或切换 LLM_PROVIDER=claude")
         response.raise_for_status()
 
         result = response.json()
@@ -206,6 +210,8 @@ def refine_text_with_ai(original_content, user_requirement):
     if llm_provider == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY")
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+        if not api_key:
+            raise Exception("未配置 DEEPSEEK_API_KEY（云端请在 Streamlit Secrets 中配置，或切换 LLM_PROVIDER=claude）")
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {api_key}"
@@ -217,6 +223,8 @@ def refine_text_with_ai(original_content, user_requirement):
             "max_tokens": 1000
         }
         response = requests.post(f"{base_url}/chat/completions", headers=headers, json=payload, timeout=60)
+        if response.status_code == 401:
+            raise Exception("DeepSeek 鉴权失败(401)：请检查 Streamlit Secrets 中的 DEEPSEEK_API_KEY 是否正确，或切换 LLM_PROVIDER=claude")
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
         
@@ -287,4 +295,3 @@ Do NOT output any explanations or markdown, just the translated text.
         response = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=60)
         response.raise_for_status()
         return response.json()["content"][0]["text"].strip()
-

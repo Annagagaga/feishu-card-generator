@@ -20,6 +20,9 @@ if "extracted_list" not in st.session_state:
 if "processed_inputs" not in st.session_state:
     st.session_state.processed_inputs = set()
 
+def _template_path(file_name: str) -> str:
+    return os.path.join(os.path.dirname(__file__), file_name)
+
 st.header("1. 输入 PRD 内容或链接")
 st.markdown("一个输入框对应一个飞书文档链接或一段纯文本。点击 **➕ 新增输入框** 可以继续添加。")
 
@@ -285,7 +288,7 @@ if st.session_state.extracted_list:
                 st.session_state.extracted_list = edited_list
                 with st.spinner("正在组装生成中文卡片..."):
                     try:
-                        template = load_template('AI搜索引擎功能更新卡片模版 .card')
+                        template = load_template(_template_path('AI搜索引擎功能更新卡片模版 .card'))
                         card = generate_card_from_template(template, edited_list)
                         output_file = 'generated_card_web.card'
                         save_card(card, output_file)
@@ -351,13 +354,13 @@ if st.session_state.extracted_list:
             with st.spinner("正在组装生成双语卡片..."):
                 try:
                     # 生成中文
-                    zh_template = load_template('AI搜索引擎功能更新卡片模版 .card')
+                    zh_template = load_template(_template_path('AI搜索引擎功能更新卡片模版 .card'))
                     zh_card = generate_card_from_template(zh_template, edited_list)
                     zh_output_file = 'generated_card_web.card'
                     save_card(zh_card, zh_output_file)
                     
                     # 生成英文
-                    en_template = load_template('【英文】AI搜索引擎卡片模版.card')
+                    en_template = load_template(_template_path('【英文】AI搜索引擎卡片模版.card'))
                     en_card = generate_card_from_template(en_template, english_edited_list)
                     en_output_file = 'generated_card_web_en.card'
                     save_card(en_card, en_output_file)

@@ -38,7 +38,23 @@ def save_card(card, output_path):
 
 def load_template(template_path):
     try:
-        full_path = os.path.abspath(template_path)
+        candidates = []
+        if os.path.isabs(template_path):
+            candidates.append(template_path)
+        else:
+            candidates.append(os.path.abspath(template_path))
+            candidates.append(os.path.join(os.path.dirname(__file__), template_path))
+            candidates.append(os.path.join(os.path.dirname(__file__), os.path.basename(template_path)))
+
+        full_path = None
+        for p in candidates:
+            if p and os.path.exists(p):
+                full_path = p
+                break
+
+        if not full_path:
+            raise FileNotFoundError(f"未找到模版文件: {template_path}，已尝试路径: {candidates}")
+
         with open(full_path, 'r', encoding='utf-8') as f:
             return json.load(f)
     except Exception as e:
