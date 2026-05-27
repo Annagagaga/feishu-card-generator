@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+ANTHROPIC_MODEL = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
+
 
 def get_current_date():
     now = datetime.now()
@@ -65,7 +67,7 @@ EXTRACTION_PROMPT = """# Role：资深 ToB 产品运营 / 商业化产品经理
 def extract_with_claude(prd_content):
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        raise Exception("请先在 .env 文件中配置 ANTHROPIC_API_KEY")
+        raise Exception("未配置 ANTHROPIC_API_KEY（云端请在 Streamlit Secrets 中配置，或切换 LLM_PROVIDER=deepseek）")
 
     prompt = EXTRACTION_PROMPT.replace("{{PRD_CONTENT}}", prd_content)
 
@@ -76,7 +78,7 @@ def extract_with_claude(prd_content):
     }
 
     payload = {
-        "model": "claude-3-haiku-20240307",
+        "model": ANTHROPIC_MODEL,
         "max_tokens": 1024,
         "messages": [
             {
@@ -87,12 +89,17 @@ def extract_with_claude(prd_content):
     }
 
     try:
+        base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
         response = requests.post(
-            "https://api.anthropic.com/v1/messages",
+            f"{base_url}/v1/messages",
             headers=headers,
             json=payload,
             timeout=60
         )
+        if response.status_code in (401, 403):
+            raise Exception("Claude 鉴权失败(401/403)：请检查 Streamlit Secrets 中的 ANTHROPIC_API_KEY 是否正确、是否有额度/权限")
         response.raise_for_status()
 
         result = response.json()
@@ -114,6 +121,13 @@ def extract_with_claude(prd_content):
             extracted["category"] = "通用能力"
 
         return extracted
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 404:
+            raise Exception(
+                f"Claude 接口报错(404 Not Found)：当前请求地址为 {base_url}/v1/messages，"
+                f"当前模型为 {ANTHROPIC_MODEL}。这通常表示模型 ID 不可用或账号无权访问该模型。"
+            )
+        response.raise_for_status()
     except Exception as e:
         print(f"Claude API 调用失败: {str(e)}")
         raise
@@ -238,11 +252,19 @@ def refine_text_with_ai(original_content, user_requirement):
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": "claude-3-haiku-20240307",
+            "model": ANTHROPIC_MODEL,
             "max_tokens": 1024,
             "messages": [{"role": "user", "content": prompt}]
         }
-        response = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=60)
+        base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+        response = requests.post(f"{base_url}/v1/messages", headers=headers, json=payload, timeout=60)
+        if response.status_code == 404:
+            raise Exception(
+                f"Claude 接口报错(404 Not Found)：当前请求地址为 {base_url}/v1/messages，"
+                f"当前模型为 {ANTHROPIC_MODEL}。这通常表示模型 ID 不可用或账号无权访问该模型。"
+            )
         response.raise_for_status()
         return response.json()["content"][0]["text"].strip()
 
@@ -288,10 +310,18 @@ Do NOT output any explanations or markdown, just the translated text.
             "anthropic-version": "2023-06-01"
         }
         payload = {
-            "model": "claude-3-haiku-20240307",
+            "model": ANTHROPIC_MODEL,
             "max_tokens": 1024,
             "messages": [{"role": "user", "content": prompt}]
         }
-        response = requests.post("https://api.anthropic.com/v1/messages", headers=headers, json=payload, timeout=60)
+        base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+        response = requests.post(f"{base_url}/v1/messages", headers=headers, json=payload, timeout=60)
+        if response.status_code == 404:
+            raise Exception(
+                f"Claude 接口报错(404 Not Found)：当前请求地址为 {base_url}/v1/messages，"
+                f"当前模型为 {ANTHROPIC_MODEL}。这通常表示模型 ID 不可用或账号无权访问该模型。"
+            )
         response.raise_for_status()
         return response.json()["content"][0]["text"].strip()
